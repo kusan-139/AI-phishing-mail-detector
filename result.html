@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analysis Result</title>
+    <style>
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; 
+            background-color: #f0f2f5; 
+            margin: 0;
+            padding: 20px; 
+        }
+        .container { 
+            max-width: 800px; 
+            margin: auto; 
+            background: #fff; 
+            padding: 25px 40px; 
+            border-radius: 12px; 
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1); 
+            text-align: center;
+        }
+        .result-safe { color: #28a745; }
+        .result-likely { color: #fd7e14; }
+        .result-phishing { color: #dc3545; }
+        h1, h2 { font-weight: bold; }
+        .score { font-size: 24px; margin: 10px 0; }
+        .reasons { 
+            text-align: left; 
+            max-width: 600px; 
+            margin: 20px auto; 
+            padding: 15px; 
+            border: 1px solid #ddd; 
+            border-radius: 8px; 
+            background: #fafafa; 
+        }
+        .reasons ul { list-style-type: '⚠️'; padding-left: 20px; }
+        .reasons li { margin-bottom: 10px; }
+        .email-preview { 
+            text-align: left; 
+            border: 1px solid #e0e0e0; 
+            padding: 15px; 
+            margin-top: 20px; 
+            border-radius: 8px; 
+            background-color: #fdfdfd;
+        }
+        .email-preview hr { margin: 10px 0; border-top: 1px solid #eee; }
+        .email-preview p { white-space: pre-wrap; word-wrap: break-word; }
+        .feedback-section { margin-top: 30px; padding: 20px; background-color: #f0f8ff; border-radius: 8px; border: 1px solid #cce5ff;}
+        .feedback-form { display: flex; justify-content: center; align-items: center; gap: 15px; flex-wrap: wrap; }
+        .feedback-button { border: none; padding: 10px 20px; font-size: 14px; cursor: pointer; border-radius: 5px; font-weight: bold; }
+        .btn-safe { background-color: #28a745; color: white; }
+        .btn-likely { background-color: #ffc107; color: black; }
+        .btn-phishing { background-color: #dc3545; color: white; }
+        .home-link { display: inline-block; margin-top: 20px; text-decoration: none; background: #007bff; color: white; padding: 10px 20px; border-radius: 5px; }
+        
+        /* Responsive Design for Mobile */
+        @media (max-width: 600px) {
+            body { padding: 10px; }
+            .container { padding: 20px; }
+            h1 { font-size: 24px; }
+            .feedback-form { flex-direction: column; }
+            .feedback-form form { width: 100%; }
+            .feedback-button { width: 100%; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="{{ result_class }}">{{ prediction_text }}</h1>
+        <h2 class="score {{ result_class }}">Phishing Score: {{ score }}</h2>
+
+        {% if reasons %}
+        <div class="reasons">
+            <h3>Suspicious Indicators Detected:</h3>
+            <ul>
+                {% for reason in reasons %}
+                    <li>{{ reason }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+
+        <div class="email-preview">
+            <strong>From:</strong> {{ email_sender }}<br>
+            <strong>Subject:</strong> {{ email_subject }}
+            <hr>
+            <p>{{ email_body | safe }}</p>
+        </div>
+
+        <div class="feedback-section">
+            <h4>Was our prediction wrong? Help us improve:</h4>
+            <div class="feedback-form">
+                <!-- Report as Safe -->
+                <form action="{{ url_for('feedback') }}" method="post">
+                    <input type="hidden" name="email_sender" value="{{ email_sender }}">
+                    <input type="hidden" name="email_subject" value="{{ email_subject }}">
+                    <input type="hidden" name="email_body" value="{{ email_body }}">
+                    <input type="hidden" name="original_prediction" value="{{ prediction_text }}">
+                    <input type="hidden" name="reported_as" value="Safe">
+                    <button type="submit" class="feedback-button btn-safe">Report as Safe</button>
+                </form>
+                <form action="{{ url_for('feedback') }}" method="post">
+                    <input type="hidden" name="email_sender" value="{{ email_sender }}">
+                    <input type="hidden" name="email_subject" value="{{ email_subject }}">
+                    <input type="hidden" name="email_body" value="{{ email_body }}">
+                    <input type="hidden" name="original_prediction" value="{{ prediction_text }}">
+                    <input type="hidden" name="reported_as" value="Likely Phishing">
+                    <button type="submit" class="feedback-button btn-likely">Report as Likely Phishing</button>
+                </form>
+                <form action="{{ url_for('feedback') }}" method="post">
+                    <input type="hidden" name="email_sender" value="{{ email_sender }}">
+                    <input type="hidden" name="email_subject" value="{{ email_subject }}">
+                    <input type="hidden" name="email_body" value="{{ email_body }}">
+                    <input type="hidden" name="original_prediction" value="{{ prediction_text }}">
+                    <input type="hidden" name="reported_as" value="Phishing">
+                    <button type="submit" class="feedback-button btn-phishing">Report as Phishing</button>
+                </form>
+            </div>
+        </div>
+
+        <a href="/" class="home-link">Analyze Another Email</a>
+    </div>
+</body>
+</html>
