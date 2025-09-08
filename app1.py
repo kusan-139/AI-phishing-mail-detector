@@ -1,0 +1,419 @@
+import os
+import re
+import base64
+import hashlib
+import pickle
+import uuid
+from datetime import datetime
+from flask import Flask, request, render_template, redirect, url_for, session, jsonify
+from thefuzz import fuzz
+import requests
+import tldextract
+from pymongo import MongoClient
+from bson.objectid import ObjectId
+import pandas as pd
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.linear_model import LogisticRegression
+
+# Google OAuth & API Libraries
+from google.oauth2.credentials import Credentials
+from google_auth_oauthlib.flow import Flow
+from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
+
+# --- Configuration & Security ---
+os.environ['OAUTHLIB_RELAX_TOKEN_SCOPE'] = '1'
+VT_API_KEY = os.environ.get("VT_API_KEY")
+GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY")
+MONGO_URI = os.environ.get("MONGO_URI")
+FLASK_SECRET_KEY = os.environ.get("FLASK_SECRET_KEY")
+RETRAIN_SECRET_KEY = os.environ.get("RETRAIN_SECRET_KEY")
+
+# --- Flask App Initialization ---
+app = Flask(__name__)
+app.secret_key = FLASK_SECRET_KEY
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
+
+# --- File Upload Configuration ---
+ALLOWED_EXTENSIONS = {'txt', 'pdf', 'png', 'jpg', 'jpeg', 'gif', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'zip', 'rar', '7z', 'exe', 'dll', 'scr', 'bat', 'js'}
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+# --- OAuth 2.0 Configuration ---
+# IMPORTANT: In a production environment, you MUST remove this line.
+os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1' 
+CLIENT_SECRETS_FILE = "client_secret.json"
+SCOPES = ['https://www.googleapis.com/auth/gmail.readonly', 'https://www.googleapis.com/auth/userinfo.email']
+
+# --- Database Connection ---
+try:
+    client = MongoClient(MONGO_URI)
+    db = client.phishing_detector_db
+    feedback_collection = db.feedback_emails
+    model_collection = db.ai_models
+    scan_queue_collection = db.scan_queue # <-- ADDED: Collection for worker jobs
+    print("MongoDB connected successfully!")
+except Exception as e:
+    print(f"CRITICAL: Error connecting to MongoDB. Database features will be disabled. Error: {e}")
+    feedback_collection = None
+    model_collection = None
+    scan_queue_collection = None
+
+# --- AI Model Loading from MongoDB ---
+feedback_vectorizer, feedback_model, model_exists = None, None, False
+if model_collection is not None:
+    try:
+        model_data = model_collection.find_one({'name': 'feedback_model'})
+        if model_data:
+            feedback_vectorizer = pickle.loads(model_data['vectorizer'])
+            feedback_model = pickle.loads(model_data['model'])
+            model_exists = True
+            print("AI feedback model loaded successfully from MongoDB.")
+        else:
+            print("AI model not found in database. An admin must run the local train_and_upload.py script first.")
+    except Exception as e:
+        print(f"Error loading AI model from MongoDB: {e}")
+
+# --- Forensic & Malware Analysis Functions ---
+def calculate_phishing_score(sender, subject, body):
+    score, reasons = 0, []
+    lower_body = body.lower()
+    lower_subject = subject.lower() if subject else ""
+    urls = re.findall(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+', body)
+    
+    if sender:
+        generic_domains = ['@gmail.com', '@yahoo.com', '@hotmail.com', '@outlook.com', '@aol.com']
+        official_keywords = ['bank', 'support', 'security', 'service', 'admin', 'verify', 'paypal', 'microsoft', 'google', 'netflix', 'amazon']
+        sender_local_part = sender.split('@')[0].lower()
+        sender_domain = '@' + sender.split('@')[-1].lower()
+        if any(domain in sender_domain for domain in generic_domains) and any(keyword in sender_local_part for keyword in official_keywords):
+            score += 30
+            reasons.append(f"Sender may be impersonating an official entity using a generic email provider ('{sender}') (+30 pts)")
+    
+    urgency_keywords = ['urgent', 'warning', 'action required', 'account blocked', 'suspension', 'interruption', 'verify']
+    if any(keyword in lower_subject for keyword in urgency_keywords):
+        score += 20
+        reasons.append("Subject line contains high-urgency keywords (+20 pts)")
+        
+    suspicious_tlds = ['.ru', '.cn', '.xyz', '.top', '.biz', 'info', '.ws']
+    suspicious_keywords_in_url = ['login', 'verify', 'signin', 'account-update', 'support-center', 'free-money']
+    for url in urls:
+        if any(tld in url for tld in suspicious_tlds) or any(keyword in url for keyword in suspicious_keywords_in_url):
+            score += 25
+            reasons.append(f"URL '{url[:30]}...' contains suspicious keywords or a suspicious TLD (+25 pts)")
+            break
+            
+    sensitive_command_keywords = ['enter your password', 'provide your pin', 'confirm your ssn', 'update your credentials', 'click here to log in']
+    negation_keywords = ['never ask', "don't share", 'will not ask', 'will never request']
+    if any(command in lower_body for command in sensitive_command_keywords) and not any(negation in lower_body for negation in negation_keywords):
+        score += 30
+        reasons.append("Email body makes a direct demand for sensitive login information (+30 pts)")
+        
+    if any(greeting in lower_body for greeting in ['dear user', 'dear customer', 'dear valued member']):
+        score += 15
+        reasons.append("Email uses a generic greeting (+15 pts)")
+        
+    TRUSTED_BRANDS = ['microsoft', 'google', 'netflix', 'amazon', 'apple', 'paypal', 'facebook', 'instagram', 'bank of india', 'hotstar']
+    text_to_scan = f"{sender.lower() if sender else ''} {lower_subject} {lower_body}"
+    words_in_email = set(re.findall(r'\b[a-z0-9]+\b', text_to_scan))
+    for word in words_in_email:
+        for brand in TRUSTED_BRANDS:
+            if 85 <= fuzz.ratio(word, brand.replace(' ', '')) < 100:
+                score += 40
+                reasons.append(f"Potential typo-squatting detected: '{word}' is very similar to '{brand}' (+40 pts)")
+                break
+        else: continue
+        break
+
+    for url in urls:
+        domain = tldextract.extract(url).registered_domain
+        if not domain: continue
+        
+        if VT_API_KEY:
+            try:
+                vt_url = f"https://www.virustotal.com/api/v3/domains/{domain}"
+                response = requests.get(vt_url, headers={"x-apikey": VT_API_KEY}, timeout=5)
+                if response.status_code == 200 and response.json().get('data', {}).get('attributes', {}).get('last_analysis_stats', {}).get('malicious', 0) > 0:
+                    score += 75
+                    reasons.append(f"LIVE SCAN of '{domain}' found it flagged as malicious on VirusTotal (+75 pts)")
+                    break
+            except requests.RequestException: pass
+            
+        if GOOGLE_API_KEY:
+            try:
+                api_url = f"https://safebrowsing.googleapis.com/v4/threatMatches:find?key={GOOGLE_API_KEY}"
+                payload = {"client": {"clientId": "phishingdetector-hackathon", "clientVersion": "2.0.0"}, "threatInfo": {"threatTypes": ["SOCIAL_ENGINEERING", "MALWARE"], "platformTypes": ["ANY_PLATFORM"], "threatEntryTypes": ["URL"], "threatEntries": [{"url": url}]}}
+                response = requests.post(api_url, json=payload, timeout=5)
+                if response.status_code == 200 and "matches" in response.json():
+                    threat_type = response.json()["matches"][0]["threatType"]
+                    score += 100
+                    reasons.append(f"LIVE GOOGLE SCAN: URL is on Google's blacklist for {threat_type} (+100 pts)")
+                    break
+            except requests.RequestException: pass
+    return score, reasons
+
+def analyze_attachment(attachment_content, filename):
+    malware_score, malware_reasons = 0, []
+    file_hash = hashlib.sha256(attachment_content).hexdigest()
+    malware_reasons.append(f"Attachment '{filename}' included for malware analysis.")
+    if VT_API_KEY:
+        try:
+            vt_url = f"https://www.virustotal.com/api/v3/files/{file_hash}"
+            response = requests.get(vt_url, headers={"x-apikey": VT_API_KEY}, timeout=10)
+            if response.status_code == 200 and response.json().get('data', {}).get('attributes', {}).get('last_analysis_stats', {}).get('malicious', 0) > 0:
+                malware_score += 200
+                malware_reasons.append(f"DANGER: Attachment is known malware! Flagged by VirusTotal. (+200 pts)")
+            else:
+                malware_reasons.append("Attachment is not a known malware (or has not been scanned before).")
+        except requests.RequestException: pass
+    return malware_score, malware_reasons
+
+# --- Flask App Routes ---
+@app.route('/')
+def home():
+    logged_in = 'credentials' in session
+    user_email = session.get('user_email')
+    error = request.args.get('error')
+    return render_template('index.html', logged_in=logged_in, user_email=user_email, error=error)
+
+@app.route('/login')
+def login():
+    flow = Flow.from_client_secrets_file(CLIENT_SECRETS_FILE, scopes=SCOPES, redirect_uri=url_for('oauth2callback', _external=True))
+    authorization_url, state = flow.authorization_url(access_type='offline', include_granted_scopes='true')
+    session['state'] = state
+    return redirect(authorization_url)
+
+@app.route('/oauth2callback')
+def oauth2callback():
+    state = session['state']
+    flow = Flow.from_client_secrets_file(CLIENT_SECRETS_FILE, scopes=SCOPES, state=state, redirect_uri=url_for('oauth2callback', _external=True))
+    flow.fetch_token(authorization_response=request.url)
+    credentials = flow.credentials
+    session['credentials'] = { 'token': credentials.token, 'refresh_token': credentials.refresh_token, 'token_uri': credentials.token_uri, 'client_id': credentials.client_id, 'client_secret': credentials.client_secret, 'scopes': credentials.scopes }
+    try:
+        user_info_service = build('oauth2', 'v2', credentials=credentials)
+        user_info = user_info_service.userinfo().get().execute()
+        session['user_email'] = user_info['email']
+    except Exception as e:
+        print(f"Could not fetch user email: {e}")
+    return redirect(url_for('home'))
+
+@app.route('/logout')
+def logout():
+    session.pop('credentials', None)
+    session.pop('user_email', None)
+    return redirect(url_for('home'))
+
+@app.route('/predict', methods=['POST'])
+def predict():
+    email_sender = request.form['email_sender']
+    email_subject = request.form['email_subject']
+    email_body = request.form['email_body']
+    
+    total_score, reasons = calculate_phishing_score(email_sender, email_subject, email_body)
+    
+    override_applied = False
+
+    if feedback_collection is not None:
+        exact_match = feedback_collection.find_one({'body': email_body})
+        if exact_match:
+            reported_as = exact_match.get('reported_as')
+            if reported_as == 'Safe':
+                total_score = 0
+                reasons.append("AI Override: This email was previously reported as Safe.")
+                override_applied = True
+            elif reported_as in ['Phishing', 'Likely Phishing']:
+                total_score += 40
+                reasons.append("AI Override: This email was previously reported as Phishing.")
+                override_applied = True
+
+    if not override_applied and model_exists:
+        try:
+            text_vector = feedback_vectorizer.transform([email_body])
+            ai_phishing_prob = feedback_model.predict_proba(text_vector)[0][1]
+            ai_score = int(ai_phishing_prob * 20)
+            if ai_score > 10:
+                total_score += ai_score
+                reasons.append(f"Learning AI detected suspicious patterns (+{ai_score} pts)")
+        except Exception as e:
+            print(f"AI model prediction error: {e}")
+            
+    attachment = request.files.get('attachment')
+    if attachment and attachment.filename != '':
+        if not allowed_file(attachment.filename):
+            total_score = 100
+            reasons.append(f"UPLOAD BLOCKED: File type not allowed. (+100 pts)")
+        else:
+            malware_score, malware_reasons = analyze_attachment(attachment.read(), attachment.filename)
+            total_score += malware_score
+            reasons.extend(malware_reasons)
+
+    if total_score >= 50: result, result_class = "Phishing", "result-phishing"
+    elif 25 <= total_score < 50: result, result_class = "Likely Phishing", "result-likely"
+    else: result, result_class = "Safe", "result-safe"
+    
+    return render_template('result.html', 
+                           prediction_text=result,
+                           result_class=result_class,
+                           score=total_score,
+                           reasons=reasons,
+                           email_body=email_body, 
+                           email_subject=email_subject,
+                           email_sender=email_sender)
+
+# --- ASYNCHRONOUS SCANNING ROUTES ---
+
+@app.route('/scan_inbox', methods=['POST'])
+def scan_inbox():
+    """
+    MODIFIED: This route now creates jobs for the worker instead of processing synchronously.
+    """
+    if 'credentials' not in session: return redirect(url_for('login'))
+    if scan_queue_collection is None: return "Database not connected. Cannot start scan.", 500
+    
+    creds = Credentials(**session['credentials'])
+    scan_id = str(uuid.uuid4())
+    jobs_to_insert = []
+    
+    try:
+        service = build('gmail', 'v1', credentials=creds)
+        # Scan up to 10 most recent unread emails
+        results = service.users().messages().list(userId='me', labelIds=['INBOX'], q="is:unread", maxResults=10).execute()
+        messages = results.get('messages', [])
+        
+        if not messages:
+            return redirect(url_for('scan_status', scan_id='no-emails-found'))
+
+        for msg_info in messages:
+            job = {
+                "scan_id": scan_id,
+                "user_email": session.get('user_email'),
+                "message_id": msg_info['id'],
+                "user_credentials": session['credentials'],
+                "status": "pending",
+                "submitted_at": datetime.utcnow()
+            }
+            jobs_to_insert.append(job)
+
+        if jobs_to_insert:
+            scan_queue_collection.insert_many(jobs_to_insert)
+        
+        return redirect(url_for('scan_status', scan_id=scan_id))
+        
+    except HttpError as error:
+        return f"An API error occurred: {error}"
+
+@app.route('/scan_status/<scan_id>')
+def scan_status(scan_id):
+    """
+    NEW: This route renders a page that will poll for scan results.
+    """
+    return render_template('scan_status.html', scan_id=scan_id)
+
+@app.route('/get_scan_results/<scan_id>')
+def get_scan_results(scan_id):
+    """
+    NEW: This is an API endpoint for the results page to fetch updates.
+    """
+    if scan_queue_collection is None: return jsonify({"error": "Database not connected"}), 500
+
+    results = list(scan_queue_collection.find({'scan_id': scan_id}, {'_id': 0, 'user_credentials': 0}))
+    total_jobs = len(results)
+    completed_jobs = len([r for r in results if r['status'] == 'completed' or r['status'] == 'failed'])
+    
+    return jsonify({
+        "total_jobs": total_jobs,
+        "completed_jobs": completed_jobs,
+        "results": results
+    })
+
+
+# --- ADMIN & FEEDBACK ROUTES (Unchanged) ---
+
+@app.route('/admin')
+def admin_panel():
+    feedback_count, feedback_list = 0, []
+    if feedback_collection is not None:
+        feedback_list = list(feedback_collection.find().sort("timestamp", -1))
+        feedback_count = len(feedback_list)
+    
+    return render_template('admin.html', feedback_count=feedback_count, feedback_list=feedback_list, message=request.args.get('message'))
+
+@app.route('/admin_login', methods=['POST'])
+def admin_login():
+    if request.form.get('secret_key') == RETRAIN_SECRET_KEY:
+        return redirect(url_for('admin_panel'))
+    return redirect(url_for('home', error='Invalid Admin Secret Key'))
+
+@app.route('/feedback', methods=['POST'])
+def feedback():
+    if feedback_collection is not None:
+        feedback_collection.insert_one({
+            'sender': request.form['email_sender'], 'subject': request.form['email_subject'],
+            'body': request.form['email_body'], 'original_prediction': request.form['original_prediction'],
+            'reported_as': request.form['reported_as'], 'timestamp': datetime.utcnow()
+        })
+        return redirect(url_for('thank_you'))
+    return "Database not connected. Feedback not saved.", 500
+
+@app.route('/thank_you')
+def thank_you():
+    return """
+    <html><head><title>Thank You!</title></head>
+    <body style="font-family: Arial, sans-serif; text-align: center; padding-top: 50px;">
+        <h1>Thank you for your feedback!</h1>
+        <p>Your submission has been saved and will be used to improve the detector.</p>
+        <a href="/">Go Back Home</a>
+    </body></html>
+    """
+
+@app.route('/delete_feedback', methods=['POST'])
+def delete_feedback():
+    if feedback_collection is not None and request.form.get('feedback_id'):
+        try:
+            feedback_collection.delete_one({'_id': ObjectId(request.form.get('feedback_id'))})
+            return redirect(url_for('admin_panel', message="Feedback entry deleted."))
+        except Exception as e:
+            return redirect(url_for('admin_panel', message=f"Error deleting entry: {e}"))
+    return redirect(url_for('admin_panel'))
+
+@app.route('/retrain_model', methods=['POST'])
+def retrain_model():
+    global feedback_vectorizer, feedback_model
+
+    if request.form.get('secret_key') != RETRAIN_SECRET_KEY:
+        return redirect(url_for('admin_panel', message="Unauthorized: Incorrect Secret Key"))
+    if feedback_collection is None or model_collection is None: 
+        return redirect(url_for('admin_panel', message="Error: Database not connected"))
+    
+    feedback_data = list(feedback_collection.find({}))
+    if len(feedback_data) < 5:
+        return redirect(url_for('admin_panel', message=f"Not enough feedback. Need at least 5 entries, have {len(feedback_data)}."))
+    
+    df = pd.DataFrame(feedback_data)
+    df['label'] = df['reported_as'].apply(lambda x: 1 if x in ['Phishing', 'Likely Phishing'] else 0)
+    
+    if len(df['label'].unique()) < 2:
+        return redirect(url_for('admin_panel', message="Training failed: Feedback data must contain at least one 'Safe' and one 'Phishing' example."))
+        
+    try:
+        if not model_exists or feedback_vectorizer is None:
+             return redirect(url_for('admin_panel', message="Error: AI model not found in database. An admin must run the local train_and_upload.py script first."))
+
+        X_vectorized = feedback_vectorizer.fit_transform(df['body'])
+        feedback_model.fit(X_vectorized, df['label'])
+        
+        vectorizer_pkl = pickle.dumps(feedback_vectorizer)
+        model_pkl = pickle.dumps(feedback_model)
+        model_collection.update_one(
+            {'name': 'feedback_model'},
+            {'$set': {'vectorizer': vectorizer_pkl, 'model': model_pkl, 'timestamp': datetime.utcnow()}}
+        )
+        
+        message = f"Retraining successful! The live AI model has been updated with {len(feedback_data)} entries."
+        return redirect(url_for('admin_panel', message=message))
+    except Exception as e:
+        return redirect(url_for('admin_panel', message=f"An error occurred during retraining: {e}"))
+
+if __name__ == '__main__':
+    app.run(debug=True)
