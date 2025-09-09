@@ -137,11 +137,9 @@
             color: #fff;
             text-shadow: 0 0 15px var(--primary-glow);
             margin-bottom: 15px;
-            /* ✨ ADDED ANIMATION FOR SHIELD ICON ✨ */
             animation: shield-float 3s ease-in-out infinite;
         }
         
-        /* ✨ KEYFRAMES FOR SHIELD ANIMATION ✨ */
         @keyframes shield-float {
             0% { transform: translateY(0); }
             50% { transform: translateY(-10px); }
@@ -211,32 +209,6 @@
             font-weight: 500;
         }
 
-        .submit-button {
-            width: 100%;
-            color: white;
-            padding: 15px;
-            border-radius: 8px;
-            border: 1px solid transparent;
-            cursor: pointer;
-            font-size: 1em;
-            font-weight: 600;
-            margin-top: 10px;
-            transition: all 0.3s ease;
-            display: inline-flex;
-            justify-content: center;
-            align-items: center;
-            gap: 10px;
-        }
-        .submit-button:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 4px 20px rgba(0,0,0,0.4);
-        }
-
-        .manual-submit { background: linear-gradient(45deg, #007bff, #0056b3); }
-        .scan-submit { background: linear-gradient(45deg, #dc3545, #c82333); }
-        .admin-button { background: linear-gradient(45deg, #28a745, #218838); color: white; }
-        .admin-button:hover { box-shadow: 0 4px 20px var(--success-glow); }
-
         hr { border: none; border-top: 1px solid var(--border-color); margin: 40px 0; }
         h2 { color: var(--text-color); text-align: center; font-size: 22px; margin-bottom: 20px; }
         
@@ -293,26 +265,70 @@
             position: absolute;
             bottom: 100%;
             left: 50%;
-            width: 3px; /* Thick rope */
-            height: 120px; /* Longer rope length */
-            /* ✨ CHANGED ROPE COLOR TO WHITE ✨ */
+            width: 3px;
+            height: 120px;
             background: #fff; 
             transform: translateX(-50%);
             border-radius: 1.5px;
-            box-shadow: 0 0 5px rgba(255, 255, 255, 0.4); /* Subtle shadow for definition */
+            box-shadow: 0 0 5px rgba(255, 255, 255, 0.4);
         }
         .hanging-icon svg {
-            width: 60px; /* Larger icon size */
-            height: 60px; /* Larger icon size */
-            fill: #fff; /* White fill for better visibility */
-            opacity: 0.8; /* Increased opacity */
-            filter: drop-shadow(0 0 8px rgba(0, 123, 255, 0.5)); /* Added glow */
+            width: 60px;
+            height: 60px;
+            fill: #fff;
+            opacity: 0.8;
+            filter: drop-shadow(0 0 8px rgba(0, 123, 255, 0.5));
         }
         @keyframes swing {
             0% { transform: translateX(-50%) rotateZ(0deg) rotateY(0deg); }
             50% { transform: translateX(-50%) rotateZ(5deg) rotateY(40deg); }
             100% { transform: translateX(-50%) rotateZ(0deg) rotateY(0deg); }
         }
+
+        /* --- STYLES FOR BUTTONS --- */
+        .centered-section {
+            text-align: center;
+            margin-top: 40px;
+            margin-bottom: 40px;
+        }
+
+        .action-button {
+            width: 100%;
+            /* ✨ MODIFIED: Increased width for a better look */
+            max-width: 550px;
+            
+            padding: 12px 20px;
+            border-radius: 8px;
+            border: none;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            text-align: center;
+            text-decoration: none;
+            display: inline-flex; 
+            justify-content: center;
+            align-items: center;
+            box-sizing: border-box;
+            transition: all 0.3s ease;
+        }
+        
+        .action-button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+        }
+
+        .google-btn {
+            background-color: #1a73e8;
+            color: white;
+        }
+
+        .google-btn img {
+            width: 18px;
+            height: 18px;
+            margin-right: 12px;
+            vertical-align: middle;
+        }
+        
 
         @media (max-width: 900px) {
             .hanging-icon-container { display: none; }
@@ -377,26 +393,33 @@
             <label for="attachment">Upload Attachment (Optional):</label>
             <input type="file" name="attachment">
             
-            <button type="submit" class="submit-button manual-submit"><i class="fa-solid fa-magnifying-glass"></i> Analyze Email</button>
+            <button type="submit" class="action-button" style="background: linear-gradient(45deg, #007bff, #0056b3); color: white;"><i class="fa-solid fa-magnifying-glass"></i> Analyze Email</button>
         </form>
 
         <hr>
 
         <h2>Automated Inbox Scanner</h2>
-        {% if logged_in %}
-            <p>Scan your unread emails for immediate threats.</p>
-            <form action="{{ url_for('scan_inbox') }}" method="post">
-                <button type="submit" class="submit-button scan-submit"><i class="fa-solid fa-inbox"></i> Scan My Inbox Now</button>
-            </form>
-        {% else %}
-            <p>Log in with your Google account to automatically scan your unread emails for threats.</p>
-            <a href="{{ url_for('login') }}" class="submit-button manual-submit" style="text-decoration: none; background-color: #4285F4;"><i class="fa-brands fa-google"></i> Login with Google</a>
-        {% endif %}
+        
+        <div class="centered-section">
+            {% if logged_in %}
+                <p>Scan your unread emails for immediate threats.</p>
+                <form action="{{ url_for('scan_inbox') }}" method="post" style="margin: 0;">
+                    <button type="submit" class="action-button" style="background: linear-gradient(45deg, #dc3545, #c82333); color: white;"><i class="fa-solid fa-inbox"></i> Scan My Inbox Now</button>
+                </form>
+            {% else %}
+                <p>Log in with your Google account to automatically scan your unread emails for threats.</p>
+                <a href="{{ url_for('login') }}" class="action-button google-btn">
+                    <img src="https://upload.wikimedia.org/wikipedia/commons/c/c1/Google_%22G%22_logo.svg" alt="Google G">
+                    Login with Google
+                </a>
+            {% endif %}
+        </div>
+
 
         <div class="admin-section">
             <form action="{{ url_for('admin_login') }}" method="post" class="admin-form">
                 <input type="password" name="secret_key" placeholder="Enter Admin Secret Key" required>
-                <button type="submit" class="submit-button admin-button">Admin Access</button>
+                <button type="submit" class="action-button" style="background: linear-gradient(45deg, #28a745, #218838); color: white;">Admin Access</button>
             </form>
         </div>
 
