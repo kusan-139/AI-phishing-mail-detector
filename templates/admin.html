@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Control Panel</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+    <style>
+        :root {
+            --background-start: #1a1a2e;
+            --background-end: #121223;
+            --card-background: rgba(42, 42, 60, 0.6);
+            --item-background: rgba(26, 26, 46, 0.7);
+            --text-color: #f0f0f5;
+            --text-light: #a0a0b0;
+            --border-color: rgba(255, 255, 255, 0.1);
+            --primary-glow: rgba(0, 123, 255, 0.5);
+            --danger-glow: rgba(229, 57, 53, 0.6);
+            --phishing-color: #dc3545;
+            --phishing-glow: rgba(220, 53, 69, 0.5);
+            --safe-color: #28a745;
+            --safe-glow: rgba(40, 167, 69, 0.5);
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, var(--background-start), var(--background-end));
+            background-attachment: fixed;
+            margin: 0;
+            padding: 40px 20px;
+            color: var(--text-color);
+            position: relative;
+            overflow-x: hidden;
+        }
+
+        body::before, body::after {
+            content: '';
+            position: absolute;
+            width: 300px;
+            height: 300px;
+            background: radial-gradient(circle, var(--primary-glow), transparent 70%);
+            border-radius: 50%;
+            animation: float 15s infinite ease-in-out;
+            z-index: -2;
+        }
+
+        body::after {
+            width: 200px;
+            height: 200px;
+            background: radial-gradient(circle, var(--danger-glow), transparent 70%);
+            animation-delay: -7s;
+            animation-duration: 20s;
+        }
+
+        @keyframes float {
+            0% { transform: translate(-20vw, -20vh) rotate(0deg); }
+            50% { transform: translate(20vw, 30vh) rotate(180deg); }
+            100% { transform: translate(-20vw, -20vh) rotate(360deg); }
+        }
+
+        .container {
+            max-width: 1100px;
+            margin: auto;
+            background: var(--card-background);
+            padding: 25px 40px;
+            border-radius: 20px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.37);
+            border: 1px solid var(--border-color);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+        }
+
+        h1, h2 {
+            text-align: center;
+            color: #fff;
+        }
+        h1 { font-size: 2em; }
+        h2 { font-size: 1.5em; margin-top: 30px; border-bottom: 1px solid var(--border-color); padding-bottom: 15px; }
+        
+        .stats {
+            font-size: 1.1em;
+            margin: 20px 0;
+            text-align: center;
+            color: var(--text-light);
+        }
+
+        .retrain-form {
+            text-align: center;
+            margin-bottom: 30px;
+            border: 1px solid var(--border-color);
+            padding: 25px;
+            border-radius: 12px;
+            background-color: var(--item-background);
+        }
+
+        input[type="password"] {
+            padding: 12px;
+            font-size: 16px;
+            border-radius: 8px;
+            border: 1px solid #ccc;
+            background-color: #fff;
+            color: #333;
+            width: 100%;
+            max-width: 350px;
+            box-sizing: border-box;
+            text-align: center;
+            transition: all 0.2s ease;
+        }
+        input[type="password"]:focus {
+            border-color: var(--primary-color);
+            box-shadow: 0 0 8px var(--primary-glow);
+        }
+
+        input[type="submit"] {
+            color: white;
+            padding: 12px 25px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1em;
+            font-weight: 600;
+            margin-top: 15px;
+            transition: all 0.3s ease;
+        }
+        input[type="submit"]:hover {
+            transform: translateY(-3px);
+        }
+
+        .btn-retrain { background: var(--safe-color); }
+        .btn-retrain:hover { box-shadow: 0 0 15px var(--safe-glow); }
+        
+        .message {
+            margin-bottom: 20px;
+            font-weight: bold;
+            text-align: center;
+            padding: 12px;
+            border-radius: 8px;
+            border: 1px solid transparent;
+        }
+        .error { color: #f8d7da; background-color: rgba(220, 53, 69, 0.2); border-color: var(--danger-glow); }
+        .success { color: #d4edda; background-color: rgba(40, 167, 69, 0.2); border-color: var(--safe-glow); }
+
+        .feedback-item {
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 15px;
+            text-align: left;
+            background-color: var(--item-background);
+        }
+
+        .feedback-header {
+            font-weight: 600;
+            margin-bottom: 15px;
+            color: var(--text-light);
+            line-height: 1.6;
+        }
+        .feedback-header span { font-weight: normal; color: #fff; word-wrap: break-word; }
+        .feedback-header strong { color: var(--safe-color); }
+        .feedback-header strong:first-child { color: var(--likely-color); }
+
+        .feedback-body-iframe {
+            width: 100%;
+            height: 350px; /* Increased height for better viewing */
+            background-color: #ffffff; /* White background for email rendering */
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            margin-top: 10px;
+        }
+        
+        .delete-form { display: inline-block; margin-left: 20px; vertical-align: middle; }
+        .delete-button { background-color: var(--phishing-color); color: white; border: none; padding: 6px 12px; font-size: 12px; border-radius: 4px; cursor: pointer; font-weight: bold; transition: all 0.2s ease; }
+        .delete-button:hover { background-color: #c82333; transform: scale(1.05); }
+
+        .home-link {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 60px;
+            height: 60px;
+            text-decoration: none;
+            background: linear-gradient(45deg, var(--phishing-color), #a71d2a);
+            color: white;
+            border-radius: 50%;
+            font-size: 1.5em;
+            box-shadow: 0 4px 15px var(--phishing-glow);
+            transition: all 0.3s ease;
+            z-index: 1000;
+        }
+        .home-link:hover {
+            transform: translateY(-3px) scale(1.1);
+            box-shadow: 0 6px 20px var(--phishing-glow);
+        }
+
+        .hanging-icon-container {
+            position: fixed; top: 0; z-index: -1;
+            width: 100px; height: 200px; perspective: 500px;
+        }
+        .hanging-icon-container.left { left: 5%; }
+        .hanging-icon-container.right { right: 5%; }
+        .hanging-icon {
+            position: absolute; bottom: 0; left: 50%;
+            transform-origin: top center;
+            animation: swing 6s infinite ease-in-out;
+        }
+        .hanging-icon::before {
+            content: ''; position: absolute; bottom: 100%; left: 50%;
+            width: 3px; height: 120px; background: #fff !important;
+            transform: translateX(-50%);
+        }
+        .hanging-icon svg {
+            width: 60px; height: 60px; fill: #fff; opacity: 0.8;
+            filter: drop-shadow(0 0 8px var(--primary-glow));
+        }
+        @keyframes swing {
+            0% { transform: translateX(-50%) rotateZ(0deg) rotateY(0deg); }
+            50% { transform: translateX(-50%) rotateZ(5deg) rotateY(40deg); }
+            100% { transform: translateX(-50%) rotateZ(0deg) rotateY(0deg); }
+        }
+
+        @media (max-width: 900px) { .hanging-icon-container { display: none; } }
+        
+    </style>
+</head>
+<body>
+    <div class="hanging-icon-container left">
+        <div class="hanging-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><path d="M144 144v48H304V144c0-44.2-35.8-80-80-80s-80 35.8-80 80zM80 192V144C80 64.5 144.5 0 224 0s144 64.5 144 144v48h16c35.3 0 64 28.7 64 64V448c0 35.3-28.7 64-64 64H64c-35.3 0-64-28.7-64-64V256c0-35.3 28.7-64 64-64h16z"/></svg></div>
+    </div>
+    <div class="hanging-icon-container right">
+        <div class="hanging-icon" style="animation-delay: -1.5s;"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><path d="M144 144v48H304V144c0-44.2-35.8-80-80-80s-80 35.8-80 80zM80 192V144C80 64.5 144.5 0 224 0s144 64.5 144 144v48h16c35.3 0 64 28.7 64 64V448c0 35.3-28.7 64-64 64H64c-35.3 0-64-28.7-64-64V256c0-35.3 28.7-64 64-64h16z"/></svg></div>
+    </div>
+
+    <div class="container">
+        <h1><i class="fa-solid fa-user-shield"></i> Admin Control Panel</h1>
+        
+        {% if message %}
+            <p class="message {{ 'success' if 'successful' in message else 'error' }}">{{ message }}</p>
+        {% endif %}
+
+        <div class="retrain-form">
+            <h2>AI Model Retraining</h2>
+            <div class="stats">
+                You have <strong>{{ feedback_count }}</strong> new feedback submissions ready for training.
+            </div>
+            <form action="{{ url_for('retrain_model') }}" method="post">
+                <label for="secret_key_retrain">Enter Admin Secret Key to Retrain:</label><br><br>
+                <input type="password" name="secret_key" id="secret_key_retrain" required>
+                <br>
+                <input type="submit" value="Retrain AI Model Now" class="btn-retrain">
+            </form>
+        </div>
+        
+        <h2>User Feedback Submissions</h2>
+        {% if feedback_list %}
+            {% for item in feedback_list %}
+                <div class="feedback-item">
+                    <div class="feedback-header">
+                        From: <span>{{ item.sender }}</span><br>
+                        Subject: <span>{{ item.subject }}</span><br>
+                        Original Prediction: <strong>{{ item.original_prediction }}</strong> | Reported As: <strong>{{ item.reported_as }}</strong>
+                        <form action="{{ url_for('delete_feedback') }}" method="post" class="delete-form">
+                            <input type="hidden" name="feedback_id" value="{{ item._id }}">
+                            <button type="submit" class="delete-button" onclick="return confirm('Are you sure you want to delete this feedback entry?');"><i class="fa-solid fa-trash-can"></i></button>
+                        </form>
+                    </div>
+                    <iframe class="feedback-body-iframe" sandbox srcdoc="{{ item.body }}"></iframe>
+                </div>
+            {% endfor %}
+        {% else %}
+            <p style="text-align: center; color: var(--text-light);">No feedback has been submitted yet.</p>
+        {% endif %}
+        
+    </div>
+
+    <a href="/" class="home-link" title="Back to Home"><i class="fa-solid fa-house"></i></a>
+
+</body>
+</html>

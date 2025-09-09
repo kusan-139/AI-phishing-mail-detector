@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inbox Scan Report</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+    <style>
+        :root {
+            --background-start: #1a1a2e;
+            --background-end: #121223;
+            --card-background: rgba(42, 42, 60, 0.6);
+            --item-background: rgba(26, 26, 46, 0.7);
+            --text-color: #f0f0f5;
+            --text-light: #a0a0b0;
+            --border-color: rgba(255, 255, 255, 0.1);
+            --primary-color: #007bff;
+            --safe-color: #28a745;
+            --likely-color: #fd7e14;
+            --phishing-color: #dc3545;
+            --primary-glow: rgba(0, 123, 255, 0.5);
+            --danger-glow: rgba(229, 57, 53, 0.6);
+            --phishing-glow: rgba(220, 53, 69, 0.5);
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, var(--background-start), var(--background-end));
+            background-attachment: fixed;
+            margin: 0;
+            padding: 40px 20px;
+            color: var(--text-color);
+            min-height: 100vh;
+            position: relative;
+            overflow-x: hidden;
+        }
+        
+        body::before, body::after {
+            content: '';
+            position: absolute;
+            width: 300px;
+            height: 300px;
+            background: radial-gradient(circle, var(--primary-glow), transparent 70%);
+            border-radius: 50%;
+            animation: float 15s infinite ease-in-out;
+            z-index: -2;
+        }
+
+        body::after {
+            width: 200px;
+            height: 200px;
+            background: radial-gradient(circle, var(--danger-glow), transparent 70%);
+            animation-delay: -7s;
+            animation-duration: 20s;
+        }
+        
+        @keyframes float {
+            0% { transform: translate(-20vw, -20vh) rotate(0deg); }
+            50% { transform: translate(20vw, 30vh) rotate(180deg); }
+            100% { transform: translate(-20vw, -20vh) rotate(360deg); }
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 40px auto;
+            background: var(--card-background);
+            padding: 30px 40px;
+            border-radius: 20px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.37);
+            border: 1px solid var(--border-color);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+        }
+
+        h1 {
+            text-align: center;
+            color: #fff;
+            font-size: 2em;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 15px;
+        }
+
+        .status-message {
+            text-align: center;
+            color: var(--text-light);
+            margin-bottom: 25px;
+            font-size: 1.1em;
+            font-weight: 500;
+            min-height: 25px;
+        }
+
+        .progress-bar {
+            width: 100%;
+            background-color: rgba(0,0,0,0.3);
+            border-radius: 8px;
+            margin: 20px 0 30px;
+            overflow: hidden;
+            height: 18px;
+        }
+
+        .progress-bar-inner {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, #007bff, #87bfff);
+            border-radius: 8px;
+            text-align: right;
+            color: white;
+            font-weight: 600;
+            font-size: 12px;
+            line-height: 18px;
+            padding-right: 8px;
+            box-sizing: border-box;
+            transition: width 0.4s ease-in-out;
+        }
+
+        .email-item {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            margin-bottom: 15px;
+            padding: 20px;
+            background-color: var(--item-background);
+            text-align: left;
+            border-left: 5px solid var(--primary-color);
+        }
+        
+        .email-item.status-safe { border-left-color: var(--safe-color); }
+        .email-item.status-likely { border-left-color: var(--likely-color); }
+        .email-item.status-phishing { border-left-color: var(--phishing-color); }
+
+        .email-content { flex-grow: 1; }
+        .email-header { font-weight: 600; margin-bottom: 10px; color: #fff; }
+        .email-header span { font-weight: 400; color: var(--text-light); }
+        .result { font-weight: bold; }
+        .result-safe { color: var(--safe-color); }
+        .result-likely { color: var(--likely-color); }
+        .result-phishing { color: var(--phishing-color); }
+        ul { padding-left: 20px; margin-top: 10px; color: var(--text-light); }
+
+        .home-link {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 60px;
+            height: 60px;
+            text-decoration: none;
+            background: linear-gradient(45deg, var(--phishing-color), #a71d2a);
+            color: white;
+            border-radius: 50%;
+            font-size: 1.5em;
+            box-shadow: 0 4px 15px var(--phishing-glow);
+            transition: all 0.3s ease;
+            z-index: 1000;
+        }
+        .home-link:hover {
+            transform: translateY(-3px) scale(1.1);
+            box-shadow: 0 6px 20px var(--phishing-glow);
+        }
+
+        .hanging-icon-container {
+            position: fixed; top: 0; z-index: -1;
+            width: 100px; height: 200px; perspective: 500px;
+        }
+        .hanging-icon-container.left { left: 5%; }
+        .hanging-icon-container.right { right: 5%; }
+        .hanging-icon {
+            position: absolute; bottom: 0; left: 50%;
+            transform-origin: top center;
+            animation: swing 6s infinite ease-in-out;
+        }
+        .hanging-icon::before {
+            content: ''; position: absolute; bottom: 100%; left: 50%;
+            width: 3px; height: 120px; background: #fff !important;
+            transform: translateX(-50%);
+        }
+        .hanging-icon svg {
+            width: 60px; height: 60px; fill: #fff; opacity: 0.8;
+            filter: drop-shadow(0 0 8px var(--primary-glow));
+        }
+        @keyframes swing {
+            0% { transform: translateX(-50%) rotateZ(0deg) rotateY(0deg); }
+            50% { transform: translateX(-50%) rotateZ(5deg) rotateY(40deg); }
+            100% { transform: translateX(-50%) rotateZ(0deg) rotateY(0deg); }
+        }
+
+        .container.scan-finished {
+            animation: tada 1s ease;
+        }
+        @keyframes tada {
+            from { transform: scale3d(1, 1, 1); }
+            10%, 20% { transform: scale3d(.9, .9, .9) rotate3d(0, 0, 1, -3deg); }
+            30%, 50%, 70%, 90% { transform: scale3d(1.1, 1.1, 1.1) rotate3d(0, 0, 1, 3deg); }
+            40%, 60%, 80% { transform: scale3d(1.1, 1.1, 1.1) rotate3d(0, 0, 1, -3deg); }
+            to { transform: scale3d(1, 1, 1); }
+        }
+
+        .menu-container { position: relative; flex-shrink: 0; display: flex; align-items: center; gap: 10px; }
+        
+        .dots-btn {
+            background: none;
+            border: 1px solid transparent;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 20px;
+            color: var(--text-light);
+            padding: 5px 10px;
+            line-height: 1;
+            transition: background-color 0.2s, color 0.2s;
+        }
+        .dots-btn:hover { background-color: rgba(255,255,255,0.1); color: #fff; }
+
+        .dropdown-menu {
+            display: none;
+            position: absolute;
+            right: 0;
+            top: 40px;
+            background-color: #3e3e52;
+            min-width: 200px;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.4);
+            z-index: 10;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            overflow: hidden;
+            padding: 5px;
+        }
+
+        .dropdown-menu button {
+            color: var(--text-light);
+            padding: 10px 15px;
+            font-size: 0.9em;
+            width: 100%;
+            border: none;
+            background: none;
+            text-align: left;
+            cursor: pointer;
+            border-radius: 5px;
+            transition: background-color 0.2s, color 0.2s;
+        }
+        
+        .dropdown-menu button:hover { 
+            background-color: #fff; 
+            color: #333; 
+        }
+        
+        .show { display: block; }
+        
+        .view-btn {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .view-btn:hover {
+            background-color: #0056b3;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 10px rgba(0, 123, 255, 0.4);
+        }
+        
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.7);
+            backdrop-filter: blur(5px);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 2000;
+            opacity: 0;
+            animation: fadeInModal 0.3s forwards;
+        }
+
+        .modal-content {
+            background: var(--background-end);
+            padding: 20px;
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+            /* ✨ MODIFIED: Set explicit large dimensions */
+            width: 80vw;
+            height: 80vh;
+            max-width: 1100px;
+            display: flex;
+            flex-direction: column;
+            transform: scale(0.95);
+            animation: zoomInModal 0.3s forwards;
+        }
+
+        @keyframes fadeInModal { to { opacity: 1; } }
+        @keyframes zoomInModal { to { transform: scale(1); } }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 10px;
+            margin-bottom: 15px;
+        }
+        
+        .modal-close {
+            background: none;
+            border: none;
+            color: var(--text-light);
+            font-size: 1.5em;
+            cursor: pointer;
+            transition: color 0.2s;
+        }
+        .modal-close:hover { color: #fff; }
+
+        .modal-iframe {
+            width: 100%;
+            flex-grow: 1;
+            border: none;
+            background: #fff;
+            border-radius: 8px;
+        }
+
+    </style>
+</head>
+<body>
+    <div class="hanging-icon-container left">
+        <div class="hanging-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><path d="M144 144v48H304V144c0-44.2-35.8-80-80-80s-80 35.8-80 80zM80 192V144C80 64.5 144.5 0 224 0s144 64.5 144 144v48h16c35.3 0 64 28.7 64 64V448c0 35.3-28.7 64-64 64H64c-35.3 0-64-28.7-64-64V256c0-35.3 28.7-64 64-64h16z"/></svg></div>
+    </div>
+    <div class="hanging-icon-container right">
+        <div class="hanging-icon" style="animation-delay: -1.5s;"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><path d="M144 144v48H304V144c0-44.2-35.8-80-80-80s-80 35.8-80 80zM80 192V144C80 64.5 144.5 0 224 0s144 64.5 144 144v48h16c35.3 0 64 28.7 64 64V448c0 35.3-28.7 64-64 64H64c-35.3 0-64-28.7-64-64V256c0-35.3 28.7-64 64-64h16z"/></svg></div>
+    </div>
+
+    <div class="container" id="main-container">
+        <h1><i class="fa-solid fa-inbox"></i> Inbox Scan Report</h1>
+        <p id="status-message" class="status-message">Preparing to scan...</p>
+        
+        <div class="progress-bar">
+            <div id="progressBar" class="progress-bar-inner">0%</div>
+        </div>
+
+        <div id="results-container">
+        </div>
+    </div>
+
+    <a href="/" class="home-link" title="Back to Home"><i class="fa-solid fa-house"></i></a>
+    
+    <div id="modal-placeholder"></div>
+
+    <script>
+        document.addEventListener('click', async function(event) {
+            const dotsBtn = event.target.closest('.dots-btn');
+            const feedbackBtn = event.target.closest('.feedback-btn');
+            const viewBtn = event.target.closest('.view-btn');
+            const modalOverlay = event.target.closest('.modal-overlay');
+            const modalClose = event.target.closest('.modal-close');
+
+            if (dotsBtn) {
+                const currentDropdown = dotsBtn.nextElementSibling;
+                const openDropdown = document.querySelector('.dropdown-menu.show');
+                if (openDropdown && openDropdown !== currentDropdown) {
+                    openDropdown.classList.remove('show');
+                }
+                currentDropdown.classList.toggle('show');
+            } else if (!event.target.closest('.dropdown-menu')) {
+                const openDropdown = document.querySelector('.dropdown-menu.show');
+                if (openDropdown) {
+                    openDropdown.classList.remove('show');
+                }
+            }
+            
+            if (viewBtn) {
+                const emailItem = viewBtn.closest('.email-item');
+                const emailBody = emailItem.dataset.body;
+                const emailSubject = emailItem.dataset.subject;
+                
+                const modalHTML = `
+                    <div class="modal-overlay">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h2>${emailSubject}</h2>
+                                <button class="modal-close">&times;</button>
+                            </div>
+                            <iframe class="modal-iframe" srcdoc="${emailBody.replace(/"/g, '&quot;')}"></iframe>
+                        </div>
+                    </div>
+                `;
+                document.getElementById('modal-placeholder').innerHTML = modalHTML;
+            }
+
+            if ((modalOverlay && !event.target.closest('.modal-content')) || modalClose) {
+                document.getElementById('modal-placeholder').innerHTML = '';
+            }
+
+            if (feedbackBtn) {
+                event.preventDefault();
+                const emailItem = feedbackBtn.closest('.email-item');
+                const formData = new FormData();
+                formData.append('email_sender', emailItem.dataset.sender);
+                formData.append('email_subject', emailItem.dataset.subject);
+                formData.append('email_body', emailItem.dataset.body);
+                formData.append('original_prediction', emailItem.dataset.prediction);
+                formData.append('reported_as', feedbackBtn.dataset.reportedAs);
+
+                try {
+                    const response = await fetch('{{ url_for("feedback") }}', {
+                        method: 'POST', body: new URLSearchParams(formData)
+                    });
+                    if (response.ok) {
+                        window.location.href = '{{ url_for("thank_you") }}';
+                    } else {
+                        alert('Failed to submit feedback.');
+                    }
+                } catch (error) {
+                    console.error('Error submitting feedback:', error);
+                    alert('An error occurred while submitting feedback.');
+                }
+            }
+        });
+        
+        (async function() {
+            const emailIds = JSON.parse('{{ email_ids | tojson | safe }}');
+            const totalEmails = emailIds.length;
+            const resultsContainer = document.getElementById('results-container');
+            const statusMessage = document.getElementById('status-message');
+            const progressBar = document.getElementById('progressBar');
+            const pageTitle = document.querySelector('h1');
+            const mainContainer = document.getElementById('main-container');
+
+            if (totalEmails === 0) {
+                statusMessage.textContent = "No new unread emails found in the inbox.";
+                progressBar.style.width = '100%';
+                progressBar.textContent = 'Done';
+                return;
+            }
+
+            for (let i = 0; i < totalEmails; i++) {
+                const emailId = emailIds[i];
+                const count = i + 1;
+                statusMessage.textContent = `Processing email ${count} of ${totalEmails}...`;
+
+                try {
+                    const response = await fetch('{{ url_for("process_email") }}', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ message_id: emailId }),
+                    });
+
+                    if (!response.ok) throw new Error(`Server error (${response.status})`);
+                    const result = await response.json();
+                    
+                    const resultElement = document.createElement('div');
+                    resultElement.className = `email-item status-${result.result_class}`;
+                    resultElement.dataset.sender = result.sender;
+                    resultElement.dataset.subject = result.subject;
+                    resultElement.dataset.body = result.body;
+                    resultElement.dataset.prediction = result.prediction_text;
+
+                    let reasonsHtml = '';
+                    if (result.reasons && result.reasons.length > 0) {
+                        reasonsHtml = '<ul>' + result.reasons.map(r => `<li>${r}</li>`).join('') + '</ul>';
+                    }
+                    
+                    resultElement.innerHTML = `
+                        <div class="email-content">
+                            <div class="email-header">
+                                From: <span>${result.sender}</span> <br>
+                                Subject: <span>${result.subject}</span>
+                            </div>
+                            <div class="result ${result.result_class}">
+                                <strong>Result: ${result.prediction_text} (Score: ${result.score})</strong>
+                            </div>
+                            ${reasonsHtml}
+                        </div>
+                        <div class="menu-container">
+                            <button class="view-btn"><i class="fa-solid fa-eye"></i> View</button>
+                            <button class="dots-btn">⋮</button>
+                            <div class="dropdown-menu">
+                                <button class="feedback-btn" data-reported-as="Safe">Report as Safe</button>
+                                <button class="feedback-btn" data-reported-as="Likely Phishing">Report as Likely Phishing</button>
+                                <button class="feedback-btn" data-reported-as="Phishing">Report as Phishing</button>
+                            </div>
+                        </div>
+                    `;
+                    resultsContainer.appendChild(resultElement);
+
+                } catch (error) {
+                    const errorElement = document.createElement('div');
+                    errorElement.className = 'email-item status-phishing';
+                    errorElement.innerHTML = `<div class="email-header"><strong>Error processing one email.</strong></div><p>${error.message}</p>`;
+                    resultsContainer.appendChild(errorElement);
+                }
+
+                const percentage = Math.round((count / totalEmails) * 100);
+                progressBar.style.width = percentage + '%';
+                progressBar.textContent = percentage + '%';
+            }
+            
+            statusMessage.innerHTML = `<i class="fa-solid fa-check-double"></i> Scan complete! Processed ${totalEmails} emails.`;
+            pageTitle.innerHTML = `<i class="fa-solid fa-flag-checkered"></i> Scan Finished`;
+            mainContainer.classList.add('scan-finished');
+        })();
+    </script>
+</body>
+</html>

@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Phishing & Malware Detector</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+    <style>
+        :root {
+            --primary-glow: rgba(0, 123, 255, 0.5);
+            --danger-glow: rgba(229, 57, 53, 0.6);
+            --success-glow: rgba(40, 167, 69, 0.6);
+            --background-start: #1a1a2e;
+            --background-end: #121223;
+            --card-background: rgba(42, 42, 60, 0.6);
+            --text-color: #f0f0f5;
+            --text-light: #a0a0b0;
+            --border-color: rgba(255, 255, 255, 0.1);
+            --primary-color: #007bff;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, var(--background-start), var(--background-end));
+            background-attachment: fixed;
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            overflow-x: hidden; /* Prevent horizontal scroll */
+            overflow-y: auto; /* Enable vertical scroll */
+            position: relative;
+
+            /* Custom scrollbar styles */
+            scrollbar-width: thin; /* Firefox */
+            scrollbar-color: var(--primary-color) var(--background-start); /* Firefox */
+        }
+
+        /* Webkit (Chrome, Safari) scrollbar styles */
+        body::-webkit-scrollbar {
+            width: 12px;
+        }
+
+        body::-webkit-scrollbar-track {
+            background: var(--background-start);
+        }
+
+        body::-webkit-scrollbar-thumb {
+            background-color: var(--primary-color);
+            border-radius: 6px;
+            border: 3px solid var(--background-start);
+        }
+        
+        body::before, body::after {
+            content: '';
+            position: absolute;
+            width: 300px;
+            height: 300px;
+            background: radial-gradient(circle, var(--primary-glow), transparent 70%);
+            border-radius: 50%;
+            animation: float 15s infinite ease-in-out;
+            z-index: -1;
+        }
+
+        body::after {
+            width: 200px;
+            height: 200px;
+            background: radial-gradient(circle, var(--danger-glow), transparent 70%);
+            animation-delay: -7s;
+            animation-duration: 20s;
+        }
+        
+        @keyframes float {
+            0% { transform: translate(-20vw, -20vh) rotate(0deg); }
+            50% { transform: translate(20vw, 30vh) rotate(180deg); }
+            100% { transform: translate(-20vw, -20vh) rotate(360deg); }
+        }
+
+        .container {
+            max-width: 750px;
+            width: 100%;
+            background: var(--card-background);
+            padding: 40px;
+            border-radius: 20px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.37);
+            border: 1px solid var(--border-color);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            animation: fadeIn 1s ease-out;
+            position: relative;
+            text-align: center;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .floating-user-info, .floating-logout {
+            position: fixed;
+            z-index: 1000;
+            top: 20px;
+            background: var(--card-background);
+            padding: 12px 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            border: 1px solid var(--border-color);
+            backdrop-filter: blur(10px);
+            font-size: 14px;
+            transition: all 0.3s ease;
+        }
+        .floating-user-info:hover, .floating-logout:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.3);
+        }
+        .floating-user-info { left: 20px; color: var(--text-light); }
+        .floating-logout { right: 20px; }
+        .floating-logout a {
+            color: #ff7b7b;
+            text-decoration: none;
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .floating-logout a:hover { color: #ff9a9a; }
+
+        .main-title-section { text-align: center; margin-bottom: 30px; }
+        .header-icon {
+            font-size: 50px;
+            color: #fff;
+            text-shadow: 0 0 15px var(--primary-glow);
+            margin-bottom: 15px;
+            /* ✨ ADDED ANIMATION FOR SHIELD ICON ✨ */
+            animation: shield-float 3s ease-in-out infinite;
+        }
+        
+        /* ✨ KEYFRAMES FOR SHIELD ANIMATION ✨ */
+        @keyframes shield-float {
+            0% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+            100% { transform: translateY(0); }
+        }
+
+        .headline { 
+            font-size: 2.2em; 
+            font-weight: 700; 
+            color: #fff; 
+            margin-bottom: 10px;
+            min-height: 1.2em; 
+        }
+        .subtitle { color: var(--text-light); margin-bottom: 20px; }
+        .typewriter-text {
+            color: #87bfff;
+            border-right: .1em solid #87bfff;
+            white-space: nowrap;
+            overflow: hidden;
+            vertical-align: bottom;
+            display: inline-block;
+            animation: blink-caret .75s step-end infinite;
+        }
+        @keyframes blink-caret {
+            from, to { border-color: transparent }
+            50% { border-color: #87bfff; }
+        }
+
+        input[type="email"], input[type="text"], textarea, input[type="password"] {
+            width: 100%;
+            padding: 14px;
+            margin-bottom: 15px;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            background-color: rgba(0,0,0,0.2);
+            color: var(--text-color);
+            font-size: 16px;
+            font-family: inherit;
+            box-sizing: border-box;
+            transition: all 0.3s ease;
+            text-align: left;
+        }
+        input[type="file"] {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 15px;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            background-color: rgba(0,0,0,0.2);
+            color: var(--text-light);
+            font-size: 16px;
+            font-family: inherit;
+            box-sizing: border-box;
+            cursor: pointer;
+        }
+        input:focus, textarea:focus {
+            outline: none;
+            border-color: var(--primary-glow);
+            box-shadow: 0 0 10px var(--primary-glow);
+        }
+        textarea { height: 120px; resize: vertical; }
+        label {
+            display: block;
+            text-align: left;
+            margin-bottom: 5px;
+            color: var(--text-light);
+            font-weight: 500;
+        }
+
+        .submit-button {
+            width: 100%;
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid transparent;
+            cursor: pointer;
+            font-size: 1em;
+            font-weight: 600;
+            margin-top: 10px;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+        }
+        .submit-button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+        }
+
+        .manual-submit { background: linear-gradient(45deg, #007bff, #0056b3); }
+        .scan-submit { background: linear-gradient(45deg, #dc3545, #c82333); }
+        .admin-button { background: linear-gradient(45deg, #28a745, #218838); color: white; }
+        .admin-button:hover { box-shadow: 0 4px 20px var(--success-glow); }
+
+        hr { border: none; border-top: 1px solid var(--border-color); margin: 40px 0; }
+        h2 { color: var(--text-color); text-align: center; font-size: 22px; margin-bottom: 20px; }
+        
+        .admin-section {
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            justify-content: center;
+        }
+        .admin-form {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 10px;
+            align-items: center;
+            width: 100%;
+            max-width: 500px;
+        }
+        .admin-form input[type="password"] { margin-bottom: 0; }
+        .admin-form .submit-button { margin-top: 0; height: 100%; }
+        
+        .error-message {
+            color: #f8d7da; 
+            font-weight: bold; 
+            margin-top: 20px; 
+            background-color: rgba(220, 53, 69, 0.2); 
+            border: 1px solid var(--danger-glow); 
+            padding: 10px; 
+            border-radius: 5px; 
+            text-align: center;
+        }
+        
+        /* --- Hanging Icon Styles --- */
+        .hanging-icon-container {
+            position: fixed;
+            top: 0;
+            z-index: -1;
+            width: 100px;
+            height: 200px;
+            perspective: 500px;
+        }
+        .hanging-icon-container.left { left: 5%; }
+        .hanging-icon-container.right { right: 5%; }
+
+        .hanging-icon {
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            transform-origin: top center;
+            animation: swing 6s infinite ease-in-out;
+        }
+        .hanging-icon::before {
+            content: '';
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            width: 3px; /* Thick rope */
+            height: 120px; /* Longer rope length */
+            /* ✨ CHANGED ROPE COLOR TO WHITE ✨ */
+            background: #fff; 
+            transform: translateX(-50%);
+            border-radius: 1.5px;
+            box-shadow: 0 0 5px rgba(255, 255, 255, 0.4); /* Subtle shadow for definition */
+        }
+        .hanging-icon svg {
+            width: 60px; /* Larger icon size */
+            height: 60px; /* Larger icon size */
+            fill: #fff; /* White fill for better visibility */
+            opacity: 0.8; /* Increased opacity */
+            filter: drop-shadow(0 0 8px rgba(0, 123, 255, 0.5)); /* Added glow */
+        }
+        @keyframes swing {
+            0% { transform: translateX(-50%) rotateZ(0deg) rotateY(0deg); }
+            50% { transform: translateX(-50%) rotateZ(5deg) rotateY(40deg); }
+            100% { transform: translateX(-50%) rotateZ(0deg) rotateY(0deg); }
+        }
+
+        @media (max-width: 900px) {
+            .hanging-icon-container { display: none; }
+        }
+        @media (max-width: 700px) {
+            .floating-user-info, .floating-logout {
+                position: static;
+                width: auto;
+                margin: 0 auto 20px;
+                display: inline-block;
+                text-align: center;
+            }
+            .floating-user-info { display: block; }
+            .floating-logout { display: inline-block; }
+            .admin-form { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="hanging-icon-container left">
+        <div class="hanging-icon icon-1">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><path d="M144 144v48H304V144c0-44.2-35.8-80-80-80s-80 35.8-80 80zM80 192V144C80 64.5 144.5 0 224 0s144 64.5 144 144v48h16c35.3 0 64 28.7 64 64V448c0 35.3-28.7 64-64 64H64c-35.3 0-64-28.7-64-64V256c0-35.3 28.7-64 64-64h16z"/></svg>
+        </div>
+    </div>
+    <div class="hanging-icon-container right">
+        <div class="hanging-icon icon-1" style="animation-delay: -1.5s;">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><path d="M144 144v48H304V144c0-44.2-35.8-80-80-80s-80 35.8-80 80zM80 192V144C80 64.5 144.5 0 224 0s144 64.5 144 144v48h16c35.3 0 64 28.7 64 64V448c0 35.3-28.7 64-64 64H64c-35.3 0-64-28.7-64-64V256c0-35.3 28.7-64 64-64h16z"/></svg>
+        </div>
+    </div>
+
+    {% if logged_in %}
+        <div class="floating-user-info">
+            Logged in as: <strong>{{ user_email }}</strong>
+        </div>
+        <div class="floating-logout">
+            <a href="{{ url_for('logout') }}"><i class="fa-solid fa-right-from-bracket"></i> Logout</a>
+        </div>
+    {% endif %}
+
+    <div class="container">
+        
+        {% if error %}
+            <p class="error-message">{{ error }}</p>
+        {% endif %}
+        
+        <div class="main-title-section">
+            <div class="header-icon"><i class="fa-solid fa-shield-virus"></i></div>
+            <h1 class="headline">
+                AI Phishing & Malware 
+                <span id="typewriter" class="typewriter-text"></span>
+            </h1>
+            <p class="subtitle">Use the form below for a real-time analysis of any email.</p>
+        </div>
+
+        <h2 style="text-align: center;">Manual Analysis</h2>
+        <form action="{{ url_for('predict') }}" method="post" enctype="multipart/form-data">
+            <input type="email" name="email_sender" placeholder="Enter sender's email (e.g., sender@example.com)" required>
+            <input type="text" name="email_subject" placeholder="Enter email subject" required>
+            <textarea name="email_body" placeholder="Paste the full email body here..." required></textarea>
+            
+            <label for="attachment">Upload Attachment (Optional):</label>
+            <input type="file" name="attachment">
+            
+            <button type="submit" class="submit-button manual-submit"><i class="fa-solid fa-magnifying-glass"></i> Analyze Email</button>
+        </form>
+
+        <hr>
+
+        <h2>Automated Inbox Scanner</h2>
+        {% if logged_in %}
+            <p>Scan your unread emails for immediate threats.</p>
+            <form action="{{ url_for('scan_inbox') }}" method="post">
+                <button type="submit" class="submit-button scan-submit"><i class="fa-solid fa-inbox"></i> Scan My Inbox Now</button>
+            </form>
+        {% else %}
+            <p>Log in with your Google account to automatically scan your unread emails for threats.</p>
+            <a href="{{ url_for('login') }}" class="submit-button manual-submit" style="text-decoration: none; background-color: #4285F4;"><i class="fa-brands fa-google"></i> Login with Google</a>
+        {% endif %}
+
+        <div class="admin-section">
+            <form action="{{ url_for('admin_login') }}" method="post" class="admin-form">
+                <input type="password" name="secret_key" placeholder="Enter Admin Secret Key" required>
+                <button type="submit" class="submit-button admin-button">Admin Access</button>
+            </form>
+        </div>
+
+    </div>
+
+    <script>
+        // JavaScript for the typewriter effect
+        const words = ["Detector", "Scanner", "Guardian"];
+        let i = 0, j = 0, currentWord = "", isDeleting = false;
+        const typewriterElement = document.getElementById("typewriter");
+
+        function type() {
+            currentWord = words[i];
+            if (isDeleting) {
+                typewriterElement.textContent = currentWord.substring(0, j--);
+            } else {
+                typewriterElement.textContent = currentWord.substring(0, j++);
+            }
+
+            if (!isDeleting && j === currentWord.length + 1) {
+                setTimeout(() => { isDeleting = true; }, 1500);
+            } else if (isDeleting && j === 0) {
+                isDeleting = false;
+                i = (i + 1) % words.length;
+            }
+
+            const typingSpeed = isDeleting ? 50 : 150;
+            setTimeout(type, typingSpeed);
+        }
+
+        document.addEventListener("DOMContentLoaded", type);
+    </script>
+
+</body>
+</html>

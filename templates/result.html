@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analysis Result</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+    <style>
+        :root {
+            --background-start: #1a1a2e;
+            --background-end: #121223;
+            --card-background: rgba(42, 42, 60, 0.6);
+            --item-background: rgba(26, 26, 46, 0.7);
+            --text-color: #f0f0f5;
+            --text-light: #a0a0b0;
+            --border-color: rgba(255, 255, 255, 0.1);
+            --safe-color: #28a745;
+            --likely-color: #fd7e14;
+            --phishing-color: #dc3545;
+            /* ✨ ADDED: Variables for background effects */
+            --primary-glow: rgba(0, 123, 255, 0.5);
+            --danger-glow: rgba(229, 57, 53, 0.6);
+            --safe-glow: rgba(40, 167, 69, 0.5);
+            --likely-glow: rgba(253, 126, 20, 0.5);
+            --phishing-glow: rgba(220, 53, 69, 0.5);
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, var(--background-start), var(--background-end));
+            background-attachment: fixed;
+            margin: 0;
+            padding: 20px;
+            color: var(--text-color);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            /* ✨ ADDED: Properties for background effects */
+            position: relative;
+            overflow-x: hidden;
+        }
+        
+        /* ✨ ADDED: Animated background glow */
+        body::before, body::after {
+            content: '';
+            position: absolute;
+            width: 300px;
+            height: 300px;
+            background: radial-gradient(circle, var(--primary-glow), transparent 70%);
+            border-radius: 50%;
+            animation: float 15s infinite ease-in-out;
+            z-index: -2;
+        }
+
+        body::after {
+            width: 200px;
+            height: 200px;
+            background: radial-gradient(circle, var(--danger-glow), transparent 70%);
+            animation-delay: -7s;
+            animation-duration: 20s;
+        }
+        
+        @keyframes float {
+            0% { transform: translate(-20vw, -20vh) rotate(0deg); }
+            50% { transform: translate(20vw, 30vh) rotate(180deg); }
+            100% { transform: translate(-20vw, -20vh) rotate(360deg); }
+        }
+
+
+        .container {
+            max-width: 800px;
+            width: 100%;
+            background: var(--card-background);
+            padding: 30px 40px;
+            border-radius: 20px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.37);
+            border: 1px solid var(--border-color);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            text-align: center;
+            animation: fadeIn 0.6s ease-out;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .result-header {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-bottom: 30px;
+        }
+
+        .score-gauge {
+            position: relative;
+            width: 150px;
+            height: 150px;
+            border-radius: 50%;
+            display: grid;
+            place-items: center;
+            margin-bottom: 20px;
+        }
+
+        .score-gauge::before {
+            content: '';
+            position: absolute;
+            height: 84%;
+            width: 84%;
+            background-color: var(--background-end);
+            border-radius: 50%;
+        }
+
+        .score-value {
+            position: relative;
+            font-size: 2.5em;
+            font-weight: 700;
+        }
+        
+        .result-icon {
+            font-size: 3em;
+            margin-bottom: 10px;
+        }
+        
+        h1 {
+            font-size: 2.2em;
+            margin: 0;
+        }
+
+        .result-safe { color: var(--safe-color); }
+        .result-likely { color: var(--likely-color); }
+        .result-phishing { color: var(--phishing-color); }
+
+        .content-section {
+            background: var(--item-background);
+            padding: 20px;
+            border-radius: 12px;
+            margin-top: 25px;
+            border: 1px solid var(--border-color);
+            text-align: left;
+        }
+
+        .content-section h3 {
+            margin-top: 0;
+            color: #fff;
+            font-size: 1.2em;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 10px;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .reasons ul {
+            list-style: none;
+            padding-left: 0;
+        }
+
+        .reasons li {
+            margin-bottom: 12px;
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            color: var(--text-light);
+        }
+        
+        .reasons li i {
+            margin-top: 4px;
+            color: var(--likely-color);
+        }
+
+        .email-preview strong {
+            color: #fff;
+        }
+        
+        .email-preview hr {
+            margin: 15px 0;
+            border-color: var(--border-color);
+        }
+
+        .email-preview p {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            color: var(--text-light);
+            background-color: rgba(0,0,0,0.2);
+            padding: 15px;
+            border-radius: 8px;
+        }
+
+        .feedback-section {
+            background: none;
+            border: 1px solid var(--border-color);
+        }
+        
+        .feedback-form {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 15px;
+            flex-wrap: wrap;
+            margin-top: 15px;
+        }
+
+        .feedback-button {
+            border: none;
+            padding: 12px 25px;
+            font-size: 1em;
+            cursor: pointer;
+            border-radius: 8px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .feedback-button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+        }
+
+        .btn-safe { background: var(--safe-color); color: white; }
+        .btn-safe:hover { box-shadow: 0 0 15px var(--safe-glow); }
+        .btn-likely { background: var(--likely-color); color: white; }
+        .btn-likely:hover { box-shadow: 0 0 15px var(--likely-glow); }
+        .btn-phishing { background: var(--phishing-color); color: white; }
+        .btn-phishing:hover { box-shadow: 0 0 15px var(--phishing-glow); }
+
+        .home-link {
+            display: inline-block;
+            margin-top: 30px;
+            text-decoration: none;
+            background: linear-gradient(45deg, #007bff, #0056b3);
+            color: white;
+            padding: 12px 25px;
+            border-radius: 8px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+        .home-link:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 4px 15px rgba(0, 123, 255, 0.4);
+        }
+
+        /* ✨ ADDED: Hanging Icon Styles */
+        .hanging-icon-container {
+            position: fixed; top: 0; z-index: -1;
+            width: 100px; height: 200px; perspective: 500px;
+        }
+        .hanging-icon-container.left { left: 5%; }
+        .hanging-icon-container.right { right: 5%; }
+        .hanging-icon {
+            position: absolute; bottom: 0; left: 50%;
+            transform-origin: top center;
+            animation: swing 6s infinite ease-in-out;
+        }
+        .hanging-icon::before {
+            content: ''; position: absolute; bottom: 100%; left: 50%;
+            width: 3px; height: 120px; background: #fff !important;
+            transform: translateX(-50%);
+        }
+        .hanging-icon svg {
+            width: 60px; height: 60px; fill: #fff; opacity: 0.8;
+            filter: drop-shadow(0 0 8px var(--primary-glow));
+        }
+        @keyframes swing {
+            0% { transform: translateX(-50%) rotateZ(0deg) rotateY(0deg); }
+            50% { transform: translateX(-50%) rotateZ(5deg) rotateY(40deg); }
+            100% { transform: translateX(-50%) rotateZ(0deg) rotateY(0deg); }
+        }
+
+
+        @media (max-width: 900px) {
+            .hanging-icon-container { display: none; }
+        }
+        @media (max-width: 600px) {
+            body { padding: 10px; align-items: flex-start; }
+            .container { padding: 20px; }
+            h1 { font-size: 1.8em; }
+            .score-gauge { width: 120px; height: 120px; }
+            .score-value { font-size: 2em; }
+            .feedback-form { flex-direction: column; }
+            .feedback-form form { width: 100%; }
+            .feedback-button { width: 100%; justify-content: center; }
+        }
+    </style>
+</head>
+<body>
+    <div class="hanging-icon-container left">
+        <div class="hanging-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><path d="M144 144v48H304V144c0-44.2-35.8-80-80-80s-80 35.8-80 80zM80 192V144C80 64.5 144.5 0 224 0s144 64.5 144 144v48h16c35.3 0 64 28.7 64 64V448c0 35.3-28.7 64-64 64H64c-35.3 0-64-28.7-64-64V256c0-35.3 28.7-64 64-64h16z"/></svg></div>
+    </div>
+    <div class="hanging-icon-container right">
+        <div class="hanging-icon" style="animation-delay: -1.5s;"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><path d="M144 144v48H304V144c0-44.2-35.8-80-80-80s-80 35.8-80 80zM80 192V144C80 64.5 144.5 0 224 0s144 64.5 144 144v48h16c35.3 0 64 28.7 64 64V448c0 35.3-28.7 64-64 64H64c-35.3 0-64-28.7-64-64V256c0-35.3 28.7-64 64-64h16z"/></svg></div>
+    </div>
+
+    <div class="container">
+        <div class="result-header">
+            <div id="scoreGauge" class="score-gauge">
+                <div id="scoreValue" class="score-value">0</div>
+            </div>
+            
+            {% if result_class == 'result-safe' %}
+                <i class="fas fa-shield-halved result-icon result-safe"></i>
+            {% elif result_class == 'result-likely' %}
+                <i class="fas fa-triangle-exclamation result-icon result-likely"></i>
+            {% else %}
+                <i class="fas fa-ban result-icon result-phishing"></i>
+            {% endif %}
+            
+            <h1 class="{{ result_class }}">{{ prediction_text }}</h1>
+        </div>
+
+        {% if reasons %}
+        <div class="content-section reasons">
+            <h3><i class="fa-solid fa-flag"></i>Suspicious Indicators Detected</h3>
+            <ul>
+                {% for reason in reasons %}
+                <li><i class="fa-solid fa-arrow-right"></i><div>{{ reason }}</div></li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+
+        <div class="content-section email-preview">
+            <h3><i class="fa-solid fa-envelope"></i>Email Content</h3>
+            <strong>From:</strong> {{ email_sender }}<br>
+            <strong>Subject:</strong> {{ email_subject }}
+            <hr>
+            <p>{{ email_body | safe }}</p>
+        </div>
+
+        <div class="content-section feedback-section">
+            <h3><i class="fa-solid fa-circle-question"></i>Was our prediction wrong?</h3>
+            <div class="feedback-form">
+                <form action="{{ url_for('feedback') }}" method="post">
+                    <input type="hidden" name="email_sender" value="{{ email_sender }}">
+                    <input type="hidden" name="email_subject" value="{{ email_subject }}">
+                    <input type="hidden" name="email_body" value="{{ email_body }}">
+                    <input type="hidden" name="original_prediction" value="{{ prediction_text }}">
+                    <input type="hidden" name="reported_as" value="Safe">
+                    <button type="submit" class="feedback-button btn-safe"><i class="fa-solid fa-check"></i> Report as Safe</button>
+                </form>
+                <form action="{{ url_for('feedback') }}" method="post">
+                    <input type="hidden" name="email_sender" value="{{ email_sender }}">
+                    <input type="hidden" name="email_subject" value="{{ email_subject }}">
+                    <input type="hidden" name="email_body" value="{{ email_body }}">
+                    <input type="hidden" name="original_prediction" value="{{ prediction_text }}">
+                    <input type="hidden" name="reported_as" value="Likely Phishing">
+                    <button type="submit" class="feedback-button btn-likely"><i class="fa-solid fa-exclamation"></i> Report as Likely Phishing</button>
+                </form>
+                <form action="{{ url_for('feedback') }}" method="post">
+                    <input type="hidden" name="email_sender" value="{{ email_sender }}">
+                    <input type="hidden" name="email_subject" value="{{ email_subject }}">
+                    <input type="hidden" name="email_body" value="{{ email_body }}">
+                    <input type="hidden" name="original_prediction" value="{{ prediction_text }}">
+                    <input type="hidden" name="reported_as" value="Phishing">
+                    <button type="submit" class="feedback-button btn-phishing"><i class="fa-solid fa-skull-crossbones"></i> Report as Phishing</button>
+                </form>
+            </div>
+        </div>
+
+        <a href="/" class="home-link"><i class="fa-solid fa-arrow-rotate-left"></i> Analyze Another Email</a>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const score = {{ score }};
+            const resultClass = '{{ result_class }}';
+            const gauge = document.getElementById('scoreGauge');
+            const valueContainer = document.getElementById('scoreValue');
+            
+            let colorStart, colorEnd;
+            if (resultClass === 'result-safe') {
+                colorStart = '#28a745'; colorEnd = '#5dff8d';
+            } else if (resultClass === 'result-likely') {
+                colorStart = '#fd7e14'; colorEnd = '#ffc107';
+            } else {
+                colorStart = '#dc3545'; colorEnd = '#ff7b7b';
+            }
+
+            let counter = 0;
+            const targetValue = Math.min(score, 100); 
+            if (isNaN(targetValue)) return; 
+
+            const interval = setInterval(() => {
+                if (counter >= targetValue) {
+                    if (targetValue === 0) valueContainer.textContent = 0;
+                    clearInterval(interval);
+                    return;
+                }
+                counter++;
+                valueContainer.textContent = counter;
+                const angle = (counter / 100) * 360;
+                gauge.style.background = `conic-gradient(
+                    ${colorStart} ${angle}deg,
+                    rgba(0,0,0,0.2) ${angle}deg
+                )`;
+            }, 15);
+        });
+    </script>
+</body>
+</html>
