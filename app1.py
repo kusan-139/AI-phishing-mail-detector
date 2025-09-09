@@ -3,9 +3,8 @@ import re
 import base64
 import hashlib
 import pickle
-import uuid
 from datetime import datetime
-from flask import Flask, request, render_template, redirect, url_for, session, jsonify
+from flask import Flask, request, render_template, redirect, url_for, session
 from thefuzz import fuzz
 import requests
 import tldextract
@@ -40,8 +39,7 @@ def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 # --- OAuth 2.0 Configuration ---
-# IMPORTANT: In a production environment, you MUST remove this line.
-os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1' 
+os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
 CLIENT_SECRETS_FILE = "client_secret.json"
 SCOPES = ['https://www.googleapis.com/auth/gmail.readonly', 'https://www.googleapis.com/auth/userinfo.email']
 
@@ -51,13 +49,11 @@ try:
     db = client.phishing_detector_db
     feedback_collection = db.feedback_emails
     model_collection = db.ai_models
-    scan_queue_collection = db.scan_queue # <-- ADDED: Collection for worker jobs
     print("MongoDB connected successfully!")
 except Exception as e:
     print(f"CRITICAL: Error connecting to MongoDB. Database features will be disabled. Error: {e}")
     feedback_collection = None
     model_collection = None
-    scan_queue_collection = None
 
 # --- AI Model Loading from MongoDB ---
 feedback_vectorizer, feedback_model, model_exists = None, None, False
@@ -212,21 +208,27 @@ def predict():
     
     total_score, reasons = calculate_phishing_score(email_sender, email_subject, email_body)
     
+    # --- THIS IS THE NEW LOGIC ---
+    # Assume no override initially
     override_applied = False
 
+    # Step 1: Check the "memory" (MongoDB) for an exact match.
     if feedback_collection is not None:
         exact_match = feedback_collection.find_one({'body': email_body})
         if exact_match:
             reported_as = exact_match.get('reported_as')
             if reported_as == 'Safe':
-                total_score = 0
+                # If a user previously said this is Safe, trust them.
+                total_score = 0 # Override score to 0
                 reasons.append("AI Override: This email was previously reported as Safe.")
                 override_applied = True
             elif reported_as in ['Phishing', 'Likely Phishing']:
-                total_score += 40
+                # If a user previously said this is Phishing, trust them.
+                total_score += 40 # Add a heavy penalty
                 reasons.append("AI Override: This email was previously reported as Phishing.")
                 override_applied = True
 
+    # Step 2: If no exact match was found in memory, use the general AI model.
     if not override_applied and model_exists:
         try:
             text_vector = feedback_vectorizer.transform([email_body])
@@ -237,6 +239,7 @@ def predict():
                 reasons.append(f"Learning AI detected suspicious patterns (+{ai_score} pts)")
         except Exception as e:
             print(f"AI model prediction error: {e}")
+    # --- END OF NEW LOGIC ---
             
     attachment = request.files.get('attachment')
     if attachment and attachment.filename != '':
@@ -260,75 +263,71 @@ def predict():
                            email_body=email_body, 
                            email_subject=email_subject,
                            email_sender=email_sender)
-
-# --- ASYNCHRONOUS SCANNING ROUTES ---
-
 @app.route('/scan_inbox', methods=['POST'])
 def scan_inbox():
-    """
-    MODIFIED: This route now creates jobs for the worker instead of processing synchronously.
-    """
     if 'credentials' not in session: return redirect(url_for('login'))
-    if scan_queue_collection is None: return "Database not connected. Cannot start scan.", 500
     
     creds = Credentials(**session['credentials'])
-    scan_id = str(uuid.uuid4())
-    jobs_to_insert = []
-    
+    email_ids = []
     try:
         service = build('gmail', 'v1', credentials=creds)
-        # Scan up to 10 most recent unread emails
-        results = service.users().messages().list(userId='me', labelIds=['INBOX'], q="is:unread", maxResults=10).execute()
+        results = service.users().messages().list(userId='me', labelIds=['INBOX'], q="is:unread").execute()
         messages = results.get('messages', [])
-        
-        if not messages:
-            return redirect(url_for('scan_status', scan_id='no-emails-found'))
-
-        for msg_info in messages:
-            job = {
-                "scan_id": scan_id,
-                "user_email": session.get('user_email'),
-                "message_id": msg_info['id'],
-                "user_credentials": session['credentials'],
-                "status": "pending",
-                "submitted_at": datetime.utcnow()
-            }
-            jobs_to_insert.append(job)
-
-        if jobs_to_insert:
-            scan_queue_collection.insert_many(jobs_to_insert)
-        
-        return redirect(url_for('scan_status', scan_id=scan_id))
-        
+        for msg_info in messages[:5]:
+            email_ids.append(msg_info['id'])
+        return render_template('scan_results.html', email_ids=email_ids)
     except HttpError as error:
         return f"An API error occurred: {error}"
 
-@app.route('/scan_status/<scan_id>')
-def scan_status(scan_id):
-    """
-    NEW: This route renders a page that will poll for scan results.
-    """
-    return render_template('scan_status.html', scan_id=scan_id)
+@app.route('/process_email', methods=['POST'])
+def process_email():
+    if 'credentials' not in session: return {"error": "User not logged in"}, 401
+    data = request.get_json()
+    message_id = data.get('message_id')
+    if not message_id: return {"error": "Message ID is missing"}, 400
+    creds = Credentials(**session['credentials'])
+    try:
+        service = build('gmail', 'v1', credentials=creds)
+        msg = service.users().messages().get(userId='me', id=message_id, format='full').execute()
+        payload = msg.get('payload', {})
+        headers = payload.get('headers', [])
+        subject = next((h['value'] for h in headers if h['name'].lower() == 'subject'), 'No Subject')
+        sender = next((h['value'] for h in headers if h['name'].lower() == 'from'), 'No Sender')
+        body = ""
+        total_score, reasons = 0, []
+        
+        parts = [payload]
+        if 'parts' in payload: parts.extend(payload['parts'])
+        for part in parts:
+            if part.get('mimeType') == 'text/plain' and 'data' in part.get('body', {}):
+                body = base64.urlsafe_b64decode(part['body']['data']).decode('utf-8', 'ignore')
+                break
+        if not body:
+            for part in parts:
+                if part.get('mimeType') == 'text/html' and 'data' in part.get('body', {}):
+                    body = base64.urlsafe_b64decode(part['body']['data']).decode('utf-8', 'ignore')
+                    break
+        for part in parts:
+            if part.get('filename'):
+                att_id = part.get('body', {}).get('attachmentId')
+                if att_id:
+                    attachment = service.users().messages().attachments().get(userId='me', messageId=msg['id'], id=att_id).execute()
+                    file_data = base64.urlsafe_b64decode(attachment['data'])
+                    malware_score, malware_reasons = analyze_attachment(file_data, part.get('filename'))
+                    total_score += malware_score
+                    reasons.extend(malware_reasons)
+                    
+        phishing_score, phishing_reasons = calculate_phishing_score(sender, subject, body)
+        total_score += phishing_score
+        reasons.extend(phishing_reasons)
 
-@app.route('/get_scan_results/<scan_id>')
-def get_scan_results(scan_id):
-    """
-    NEW: This is an API endpoint for the results page to fetch updates.
-    """
-    if scan_queue_collection is None: return jsonify({"error": "Database not connected"}), 500
-
-    results = list(scan_queue_collection.find({'scan_id': scan_id}, {'_id': 0, 'user_credentials': 0}))
-    total_jobs = len(results)
-    completed_jobs = len([r for r in results if r['status'] == 'completed' or r['status'] == 'failed'])
-    
-    return jsonify({
-        "total_jobs": total_jobs,
-        "completed_jobs": completed_jobs,
-        "results": results
-    })
-
-
-# --- ADMIN & FEEDBACK ROUTES (Unchanged) ---
+        if total_score >= 50: result, result_class = "Phishing", "result-phishing"
+        elif 25 <= total_score < 50: result, result_class = "Likely Phishing", "result-likely"
+        else: result, result_class = "Safe", "result-safe"
+        return {"sender": sender, "subject": subject, "score": total_score, "prediction_text": result, "result_class": result_class, "reasons": reasons}
+    except Exception as e:
+        print(f"Error processing email {message_id}: {e}")
+        return {"error": str(e)}, 500
 
 @app.route('/admin')
 def admin_panel():
@@ -379,6 +378,7 @@ def delete_feedback():
 
 @app.route('/retrain_model', methods=['POST'])
 def retrain_model():
+    # The global declaration MUST be the first thing in the function
     global feedback_vectorizer, feedback_model
 
     if request.form.get('secret_key') != RETRAIN_SECRET_KEY:
@@ -397,12 +397,15 @@ def retrain_model():
         return redirect(url_for('admin_panel', message="Training failed: Feedback data must contain at least one 'Safe' and one 'Phishing' example."))
         
     try:
+        # Check if the model objects are loaded in memory
         if not model_exists or feedback_vectorizer is None:
              return redirect(url_for('admin_panel', message="Error: AI model not found in database. An admin must run the local train_and_upload.py script first."))
 
+        # Use the existing global objects to retrain in memory
         X_vectorized = feedback_vectorizer.fit_transform(df['body'])
         feedback_model.fit(X_vectorized, df['label'])
         
+        # Save the newly-trained objects back to the database
         vectorizer_pkl = pickle.dumps(feedback_vectorizer)
         model_pkl = pickle.dumps(feedback_model)
         model_collection.update_one(
@@ -417,3 +420,4 @@ def retrain_model():
 
 if __name__ == '__main__':
     app.run(debug=True)
+
