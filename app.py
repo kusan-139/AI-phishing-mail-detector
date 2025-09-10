@@ -13,21 +13,11 @@ from bson.objectid import ObjectId
 import pandas as pd
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
-from dotenv import load_dotenv 
-
-# ✨ ADDED: New import for parsing HTML
+from dotenv import load_dotenv
 from bs4 import BeautifulSoup
-
-load_dotenv() 
-
 import os
-import json # and other imports...
-
-# --- ADD THIS CODE FOR DEBUGGING ---
-mongo_uri_from_env = os.environ.get("MONGO_URI")
-print("--- DEBUGGING ---")
-print(f"Value of MONGO_URI is: '{mongo_uri_from_env}'")
-print("--- END DEBUGGING ---")
+import json
+from functools import wraps # <-- 1. IMPORT ADDED
 
 # Google OAuth & API Libraries
 from google.oauth2.credentials import Credentials
@@ -48,12 +38,21 @@ app = Flask(__name__)
 app.secret_key = FLASK_SECRET_KEY
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
 
+# --- 2. DECORATOR ADDED ---
+# This decorator checks if a user is logged in as an admin before allowing access to a route.
+def admin_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not session.get('is_admin'):
+            return redirect(url_for('home', error='Admin access required.'))
+        return f(*args, **kwargs)
+    return decorated_function
+
 # --- File Upload Configuration ---
 ALLOWED_EXTENSIONS = {'txt', 'pdf', 'png', 'jpg', 'jpeg', 'gif', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'zip', 'rar', '7z', 'exe', 'dll', 'scr', 'bat', 'js'}
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-# --- OAuth 2.0 Configuration ---
 os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
 CLIENT_SECRETS_FILE = "client_secret.json"
 SCOPES = ['https://www.googleapis.com/auth/gmail.readonly', 'https://www.googleapis.com/auth/userinfo.email']
@@ -85,7 +84,6 @@ if model_collection is not None:
     except Exception as e:
         print(f"Error loading AI model from MongoDB: {e}")
 
-# --- ✨ MODIFIED: Replaced with a more robust email body parser ---
 def get_email_bodies(payload):
     """
     Recursively search the email payload to find both HTML and plain text bodies.
@@ -94,7 +92,6 @@ def get_email_bodies(payload):
     html_body = None
     text_body = None
 
-    # Use an iterative approach (queue) to avoid deep recursion issues
     parts_to_visit = [payload]
     while parts_to_visit:
         part = parts_to_visit.pop(0)
@@ -122,7 +119,6 @@ def get_email_bodies(payload):
     return html_body, text_body
 
 
-# --- ✨ MODIFIED: Forensic analysis function signature and logic updated ---
 def calculate_phishing_score(sender, subject, plain_text_body, full_html_body):
     score, reasons = 0, []
     
@@ -249,8 +245,7 @@ def oauth2callback():
 
 @app.route('/logout')
 def logout():
-    session.pop('credentials', None)
-    session.pop('user_email', None)
+    session.clear()
     return redirect(url_for('home'))
 
 @app.route('/predict', methods=['POST'])
@@ -259,7 +254,6 @@ def predict():
     email_subject = request.form['email_subject']
     email_body = request.form['email_body']
     
-    # ✨ MODIFIED: Create a plain text version for analysis
     plain_text_for_analysis = BeautifulSoup(email_body, "html.parser").get_text()
     total_score, reasons = calculate_phishing_score(email_sender, email_subject, plain_text_for_analysis, email_body)
     
@@ -305,14 +299,14 @@ def predict():
     elif 25 <= total_score < 50: result, result_class = "Likely Phishing", "result-likely"
     else: result, result_class = "Safe", "result-safe"
     
-    return render_template('result.html', 
-                            prediction_text=result,
-                            result_class=result_class,
-                            score=total_score,
-                            reasons=reasons,
-                            email_body=email_body, 
-                            email_subject=email_subject,
-                            email_sender=email_sender)
+    return render_template('result.html',
+                           prediction_text=result,
+                           result_class=result_class,
+                           score=total_score,
+                           reasons=reasons,
+                           email_body=email_body,
+                           email_subject=email_subject,
+                           email_sender=email_sender)
 @app.route('/scan_inbox', methods=['POST'])
 def scan_inbox():
     if 'credentials' not in session: return redirect(url_for('login'))
@@ -376,7 +370,6 @@ def process_email():
                     total_score += malware_score
                     reasons.extend(malware_reasons)
                     
-        # ✨ MODIFIED: Pass both bodies to the analysis function
         phishing_score, phishing_reasons = calculate_phishing_score(sender, subject, analysis_body_text, render_body)
         total_score += phishing_score
         reasons.extend(phishing_reasons)
@@ -390,34 +383,40 @@ def process_email():
         print(f"Error processing email {message_id}: {e}")
         return {"error": str(e)}, 500
 
+# --- 3. ADMIN ROUTES SECURED ---
+
 @app.route('/admin')
+@admin_required # Decorator applied
 def admin_panel():
+    # The 'if not session.get('is_admin')' check is no longer needed here
     feedback_count, feedback_list = 0, []
     if feedback_collection is not None:
         feedback_list = list(feedback_collection.find().sort("timestamp", -1))
         feedback_count = len(feedback_list)
-    
-    return render_template('admin.html', feedback_count=feedback_count, feedback_list=feedback_list, message=request.args.get('message'))
+    global model_exists
+    return render_template('admin.html', feedback_count=feedback_count, feedback_list=feedback_list, message=request.args.get('message'), model_exists=model_exists)
 
 @app.route('/admin_login', methods=['POST'])
 def admin_login():
-    if request.form.get('secret_key') == RETRAIN_SECRET_KEY:
+    submitted_secret = request.form.get('secret_key')
+    ADMIN_SECRET_KEY = os.environ.get("RETRAIN_SECRET_KEY")
+    if submitted_secret == ADMIN_SECRET_KEY:
+        session['is_admin'] = True
         return redirect(url_for('admin_panel'))
-    return redirect(url_for('home', error='Invalid Admin Secret Key'))
+    else:
+        return redirect(url_for('home', error='Invalid Admin Secret Key'))
 
 @app.route('/feedback', methods=['POST'])
 def feedback():
     if feedback_collection is not None:
-        # ✨ MODIFIED: This now correctly saves the full HTML body
-        # instead of converting it to plain text.
         html_body = request.form['email_body']
 
         feedback_collection.insert_one({
-            'sender': request.form['email_sender'], 
+            'sender': request.form['email_sender'],
             'subject': request.form['email_subject'],
-            'body': html_body, # Save the original HTML
+            'body': html_body,
             'original_prediction': request.form['original_prediction'],
-            'reported_as': request.form['reported_as'], 
+            'reported_as': request.form['reported_as'],
             'timestamp': datetime.utcnow()
         })
         return redirect(url_for('thank_you'))
@@ -435,6 +434,7 @@ def thank_you():
     """
 
 @app.route('/delete_feedback', methods=['POST'])
+@admin_required # Decorator applied
 def delete_feedback():
     if feedback_collection is not None and request.form.get('feedback_id'):
         try:
@@ -445,12 +445,13 @@ def delete_feedback():
     return redirect(url_for('admin_panel'))
 
 @app.route('/retrain_model', methods=['POST'])
+@admin_required # Decorator applied
 def retrain_model():
     global feedback_vectorizer, feedback_model
 
     if request.form.get('secret_key') != RETRAIN_SECRET_KEY:
         return redirect(url_for('admin_panel', message="Unauthorized: Incorrect Secret Key"))
-    if feedback_collection is None or model_collection is None: 
+    if feedback_collection is None or model_collection is None:
         return redirect(url_for('admin_panel', message="Error: Database not connected"))
     
     feedback_data = list(feedback_collection.find({}))
@@ -484,6 +485,3 @@ def retrain_model():
 
 if __name__ == '__main__':
     app.run(debug=True)
-
-
-
