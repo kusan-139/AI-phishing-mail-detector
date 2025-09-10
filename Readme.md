@@ -16,6 +16,10 @@ This is a powerful web-based Phishing Email Detector built with Flask and Python
 
 -----
 
+## Project ##
+
+![Webpage Screenshot3](Preview.jpg)
+
 ## 📂 File Structure
 
 Here are the essential files and directories for this project:
@@ -138,10 +142,15 @@ Follow these steps to set up and run the application on your local machine.
     Open your web browser and go to `http://127.0.0.1:5000`. You can now use the application to analyze emails\!
 
 
+## 📸 Preview
+
+![Webpage Screenshot](Preview1.jpg)  
+![Webpage Screenshot2](Preview2.jpg)
 
 
 🤝 Contributing Feel free to fork the repository, make improvements, and submit pull requests.
 
 
 ## 📜 License
+
 MIT License © 2025 Kusan Chakraborty
